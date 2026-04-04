@@ -1,0 +1,20 @@
+# configs/config.yaml  — base config (Hydra)
+defaults:
+  - data: isic2019
+  - model: vit_base
+  - stage1: mae
+  - stage2: finetune
+  - _self_
+
+project:
+  name: "raresight"
+  seed: 42
+  output_dir: "outputs"
+  checkpoint_dir: "checkpoints"
+  log_dir: "logs"
+
+hardware:
+  device: "cuda"        # cuda | cpu | mps
+  num_workers: 8
+  pin_memory: true
+  mixed_precision: true # AMP (fp16)

@@ -1,0 +1,73 @@
+version: "3.9"
+
+services:
+  # ── FastAPI backend ──────────────────────────────────────────────────────────
+  api:
+    build:
+      context: .
+      target: runtime-cpu       # switch to runtime-gpu for CUDA
+    command: uvicorn api.main:app --host 0.0.0.0 --port 8000
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./data:/app/data:ro
+      - ./checkpoints:/app/checkpoints:ro
+      - ./src:/app/src            # live reload in dev
+    environment:
+      - ENV=production
+      - MODEL_CHECKPOINT=/app/checkpoints/stage2_best.pth
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      retries: 3
+
+  # ── Streamlit frontend ───────────────────────────────────────────────────────
+  frontend:
+    build:
+      context: .
+      target: runtime-cpu
+    command: streamlit run frontend/app.py --server.port 8501 --server.address 0.0.0.0
+    ports:
+      - "8501:8501"
+    environment:
+      - API_URL=http://api:8000
+    depends_on:
+      - api
+
+  # ── GPU training (Stage 1 — MAE pretraining) ─────────────────────────────────
+  train-stage1:
+    build:
+      context: .
+      target: runtime-gpu
+    command: python scripts/train_stage1_pretrain.py
+    volumes:
+      - ./data:/app/data
+      - ./checkpoints:/app/checkpoints
+      - ./logs:/app/logs
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]
+    profiles: ["training"]
+
+  # ── GPU training (Stage 2 — fine-tuning) ────────────────────────────────────
+  train-stage2:
+    build:
+      context: .
+      target: runtime-gpu
+    command: python scripts/train_stage2_finetune.py
+    volumes:
+      - ./data:/app/data
+      - ./checkpoints:/app/checkpoints
+      - ./logs:/app/logs
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]
+    profiles: ["training"]

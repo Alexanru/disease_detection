@@ -1,0 +1,30 @@
+# configs/stage3/ham10000.yaml — HAM10000 multimodal dataset config
+
+name: "ham10000"
+root: "data/processed"           # Where train/val/test CSVs are
+root_multimodal: "data/raw/HAM10000"  # Where HAM10000 images are
+
+image_size: 224
+num_classes: 7  # HAM10000 has 7 baseclasses
+
+# Clinical feature dimension (for multimodal fusion)
+clinical_dim: 16  # age_norm, sex_enc, 14 anatomic locations
+
+class_names:
+  0: "Melanoma"
+  1: "Melanocytic Nevi"
+  2: "Basal Cell Carcinoma"
+  3: "Actinic Keratosis"
+  4: "Benign Keratosis"
+  5: "Dermatofibroma"
+  6: "Vascular Lesion"
+
+# Approximate HAM10000 class distribution
+class_counts:
+  0: 1113    # Melanoma
+  1: 6705    # Melanocytic Nevi
+  2: 514     # Basal Cell Carcinoma
+  3: 327     # Actinic Keratosis
+  4: 1099    # Benign Keratosis
+  5: 115     # Dermatofibroma (RARE)
+  6: 142     # Vascular Lesion (RARE)

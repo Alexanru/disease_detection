@@ -1,0 +1,68 @@
+{
+  "$schema": "https://raw.githubusercontent.com/jetify-com/devbox/0.13.7/.schema/devbox.schema.json",
+  "packages": [
+    "python@3.11",
+    "poetry@1.8.3",
+    "git",
+    "curl",
+    "wget",
+    "docker",
+    "docker-compose",
+    "gnumake",
+    "nodejs@20"
+  ],
+  "shell": {
+    "init_hook": [
+      "echo '🔬 RareSight — AI for Early Rare Disease Detection'",
+      "echo ''",
+      "echo 'Quick commands:'",
+      "echo '  devbox run setup          # Install all dependencies'",
+      "echo '  devbox run prepare       # Prepare directories'",
+      "echo '  devbox run train         # Full training pipeline'",
+      "echo '  devbox run app           # Start API + Frontend'",
+      "echo ''",
+      "export PYTHONPATH=$PYTHONPATH:$(pwd)/src"
+    ],
+    "scripts": {
+      "setup": "echo '📦 Installing dependencies...' && poetry install && echo '✅ Setup complete!'",
+      
+      "prepare": "echo '📁 Preparing directories...' && mkdir -p data/raw data/processed checkpoints logs outputs && echo '✅ Directories ready'",
+      
+      "download": "poetry run python scripts/download_data.py",
+      
+      "preprocess": "poetry run python scripts/preprocess.py",
+      
+      "train-s1": "echo '🚀 Stage 1: MAE Pre-training' && poetry run python scripts/train_stage1_pretrain.py",
+      
+      "train-s2": "echo '🚀 Stage 2: Supervised Fine-tuning' && poetry run python scripts/train_stage2_finetune.py",
+      
+      "train-s3": "echo '🚀 Stage 3: Multimodal Transfer Learning' && poetry run python scripts/train_stage3_multimodal.py",
+      
+      "train": "devbox run train-s1 && devbox run train-s2",
+      
+      "train-all": "devbox run train-s1 && devbox run train-s2 && devbox run train-s3",
+      
+      "evaluate": "echo '📊 Evaluating model...' && poetry run python scripts/evaluate.py",
+      
+      "api": "echo '🚀 Starting API on http://localhost:8000' && poetry run uvicorn api.main:app --reload --port 8000",
+      
+      "frontend": "echo '🎨 Starting Frontend on http://localhost:8501' && poetry run streamlit run frontend/app.py --server.port 8501",
+      
+      "app": "echo 'Use two terminals: devbox run api && devbox run frontend'",
+      
+      "test": "poetry run pytest tests/ -v --tb=short",
+      
+      "lint": "poetry run ruff check src/ scripts/ api/ && poetry run mypy src/",
+      
+      "format": "poetry run ruff format src/ scripts/ api/",
+      
+      "docker-build": "docker compose build",
+      
+      "docker-up": "docker compose up -d",
+      
+      "docker-down": "docker compose down",
+      
+      "clean": "find . -type d -name __pycache__ -exec rm -rf {} + 2>/dev/null; find . -name '*.pyc' -delete; rm -rf .pytest_cache .mypy_cache .ruff_cache"
+    }
+  }
+}

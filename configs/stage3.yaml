@@ -1,0 +1,36 @@
+# configs/stage3.yaml — Stage 3 multimodal training hyperparameters
+
+encoder_cfg:
+  embed_dim: 768
+  depth: 12
+  num_heads: 12
+  patch_size: 16
+
+model:
+  num_classes: 7
+  dropout: 0.1
+
+loss:
+  type: "focal"
+  gamma: 2.0
+  alpha: null  # Auto-computed from class counts
+
+training:
+  epochs: 30
+  batch_size: 16
+  lr: 5e-5
+  weight_decay: 1e-4
+  gradient_clip: 1.0
+  checkpoint_name: "multimodal"
+  save_every: 5
+  early_stopping_patience: 10
+
+sampler:
+  type: "weighted_random"
+  oversample_rare: true
+
+wandb:
+  project: "raresight-stage3"
+  tags: ["multimodal", "ham10000", "transfer-learning"]
+
+layer_decay: 0.75  # For layer-wise LR decay

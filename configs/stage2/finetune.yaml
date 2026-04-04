@@ -1,0 +1,36 @@
+# configs/stage2/finetune.yaml — Supervised fine-tuning
+method: "finetune"
+
+# Load encoder from Stage 1
+pretrained_checkpoint: "checkpoints/mae_best.pth"
+
+model:
+  num_classes: 8
+  dropout: 0.1
+
+loss:
+  type: "focal"           # Focal loss: handles class imbalance
+  gamma: 2.0              # Focus parameter
+  alpha: "auto"           # Compute from inverse class frequency
+  label_smoothing: 0.1
+
+training:
+  epochs: 50              # Fewer epochs for fine-tuning
+  batch_size: 32          # Smaller for fine-tuning
+  lr: 5e-5                # Much smaller LR than Stage 1
+  weight_decay: 0.01
+  gradient_clip: 1.0
+  early_stopping_patience: 15
+  checkpoint_name: "finetune"  # Outputs: finetune_best.pth
+
+# Layer-wise LR decay: lower layers freeze more, higher layers learn more
+layer_decay: 0.75
+
+# Oversampling for class balance
+sampler:
+  type: "weighted_random"
+  oversample_minority: true
+
+wandb:
+  project: "raresight"
+  tags: ["stage2", "finetune", "focal-loss"]
