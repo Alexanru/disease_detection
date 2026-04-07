@@ -51,10 +51,18 @@
       "evaluate": "echo 'Evaluating model...' && poetry run python scripts/evaluate.py",
       
       "api": "echo 'Starting API on http://localhost:8000' && poetry run uvicorn api.main:app --reload --port 8000",
+
+      "api-s2": "echo 'Starting Stage 2 API on http://localhost:8000' && MODEL_CHECKPOINT=checkpoints/finetune_fast_best.pth poetry run uvicorn api.main:app --reload --port 8000",
+
+      "api-s3": "echo 'Starting Stage 3 API on http://localhost:8000' && MODEL_MODE=stage3 MODEL_CHECKPOINT=checkpoints/multimodal_best.pth poetry run uvicorn api.main:app --reload --port 8000",
       
       "frontend": "echo 'Starting frontend on http://localhost:8501' && poetry run streamlit run frontend/app.py --server.port 8501",
       
       "app": "echo 'Use two terminals: devbox run api && devbox run frontend'",
+
+      "app-s2": "echo 'Use two terminals: devbox run api-s2 && devbox run frontend'",
+
+      "app-s3": "echo 'Use two terminals: devbox run api-s3 && devbox run frontend'",
       
       "test": "poetry run pytest tests/ -v --tb=short",
       

@@ -1,284 +1,250 @@
-"""frontend/app.py - RareSight Streamlit frontend.
+"""Streamlit frontend for RareSight."""
 
-A demo UI for the RareSight multimodal dermatology classification system.
-Connect to the FastAPI backend (api/main.py) for predictions.
+from __future__ import annotations
 
-Run with: streamlit run frontend/app.py
-"""
-
-import io
 import os
-from pathlib import Path
 
 import requests
 import streamlit as st
 from PIL import Image
 
-# ── Configuration ────────────────────────────────────────────────────────────
-
 API_URL = os.getenv("API_URL", "http://localhost:8000")
-DEMO_MODE = os.getenv("DEMO_MODE", "false").lower() == "true"
+HAM10000_LOCALIZATIONS = [
+    "abdomen", "acral", "back", "chest", "ear", "face", "foot", "genital",
+    "hand", "lower extremity", "neck", "scalp", "trunk", "unknown", "upper extremity",
+]
+
+if "uploader_key" not in st.session_state:
+    st.session_state["uploader_key"] = 0
+if "age_value" not in st.session_state:
+    st.session_state["age_value"] = 45
+if "sex_value" not in st.session_state:
+    st.session_state["sex_value"] = "unknown"
+if "localization_value" not in st.session_state:
+    st.session_state["localization_value"] = "unknown"
 
 st.set_page_config(
     page_title="RareSight",
     page_icon="R",
     layout="wide",
-    initial_sidebar_state="collapsed",
+    initial_sidebar_state="expanded",
 )
 
-# ── Sidebar ──────────────────────────────────────────────────────────────────
+
+def fetch_api_info() -> dict:
+    try:
+        health = requests.get(f"{API_URL}/health", timeout=3)
+        info = requests.get(f"{API_URL}/info", timeout=3)
+        if health.ok and info.ok:
+            return {"online": True, "health": health.json(), "info": info.json()}
+    except requests.RequestException:
+        pass
+    return {
+        "online": False,
+        "health": {"status": "offline", "model_loaded": False, "model_mode": "unknown", "checkpoint": ""},
+        "info": {"requires_clinical": False, "accepted_localizations": HAM10000_LOCALIZATIONS, "model_mode": "unknown", "checkpoint": ""},
+    }
+
+
+api_state = fetch_api_info()
+health = api_state["health"]
+info = api_state["info"]
+is_stage3 = info.get("model_mode") == "stage3"
 
 with st.sidebar:
-    st.markdown("""
-    ## **RareSight**
-    Early Detection of Rare Dermatological Conditions via AI
+    st.markdown("## RareSight")
+    st.markdown("Dermatology inference demo for the RareSight project.")
+    st.markdown(f"**API status:** {'Online' if api_state['online'] else 'Offline'}")
+    st.markdown(f"**Loaded mode:** {health.get('model_mode', 'unknown')}")
+    checkpoint = health.get("checkpoint") or "not loaded"
+    st.caption(f"Checkpoint: {checkpoint}")
+    if not api_state["online"]:
+        st.warning("Start the API in another terminal before using the interface.")
+    elif is_stage3:
+        st.info("The API is using the Stage 3 multimodal model. Clinical fields are enabled.")
+    else:
+        st.info("The API is using the Stage 2 image-only classifier.")
 
-    ---
-    
-    ### About
-    - **Datasets**: ISIC 2019, HAM10000, PAD-UFES-20
-    - **Model**: ViT-based classifier (MAE pre-trained)
-    - **Task**: Binary rare-disease detection + multi-class classification
-    
-    ### Disclaimer
-    **For research purposes only.**  
-    Not a clinical diagnostic tool.
-    """)
+st.title("RareSight")
+st.write(
+    "Upload a dermoscopy image and run either the image-only classifier or the multimodal model, "
+    "depending on the checkpoint loaded by the API."
+)
 
-    api_status = "Offline"
-    try:
-        resp = requests.get(f"{API_URL}/health", timeout=2)
-        if resp.status_code == 200:
-            api_status = "Online"
-    except:
-        api_status = "Offline"
-
-    st.markdown(f"**API Status**: {api_status}")
-    if api_status == "Offline":
-        st.warning("Backend not responding. Ensure `devbox run api` is running on another terminal.")
-
-# ── Header ───────────────────────────────────────────────────────────────────
-
-st.markdown("# RareSight")
-st.markdown("""
-**Early Detection of Rare Dermatological Conditions**
-
-Upload a dermoscopy image to detect rare skin conditions (Dermatofibroma, Vascular Lesion) 
-and classify 8 distinct dermatological diagnoses.
-""")
-
-st.divider()
-
-# ── Tab layout ───────────────────────────────────────────────────────────────
-
-tab1, tab2, tab3 = st.tabs(["Diagnosis", "Dataset Info", "How It Works"])
-
-# ──────────────────────────────────────────────────────────────────────────────
-# TAB 1: DIAGNOSIS
-# ──────────────────────────────────────────────────────────────────────────────
+tab1, tab2, tab3 = st.tabs(["Diagnosis", "What To Test", "How It Works"])
 
 with tab1:
-    col1, col2 = st.columns([1, 1], gap="large")
+    left, right = st.columns([1, 1], gap="large")
+    with left:
+        cols = st.columns([1, 1])
+        with cols[0]:
+            reset = st.button("Reset form")
+        with cols[1]:
+            clear_result = st.button("Clear results")
 
-    with col1:
-        st.subheader("Upload Image")
+        if reset:
+            st.session_state["uploader_key"] += 1
+            st.session_state["age_value"] = 45
+            st.session_state["sex_value"] = "unknown"
+            st.session_state["localization_value"] = "unknown"
+            st.session_state.pop("last_result", None)
+            st.rerun()
+
+        if clear_result:
+            st.session_state.pop("last_result", None)
+            st.rerun()
+
         uploaded_file = st.file_uploader(
-            "Choose a dermoscopy image (JPG, PNG):",
+            "Choose a dermoscopy image",
             type=["jpg", "jpeg", "png"],
-            help="Recommended: 224×224 or larger dermoscopy images"
+            help="Use dermoscopy or close-up lesion images in JPG or PNG format.",
+            key=f"uploader_{st.session_state['uploader_key']}",
         )
 
-        if uploaded_file:
+        age = None
+        sex = None
+        localization = None
+        if is_stage3:
+            st.markdown("### Clinical metadata")
+            age = st.number_input("Age", min_value=0, max_value=100, value=st.session_state["age_value"], step=1)
+            sex = st.selectbox(
+                "Sex",
+                ["unknown", "female", "male"],
+                index=["unknown", "female", "male"].index(st.session_state["sex_value"]),
+            )
+            localization = st.selectbox(
+                "Localization",
+                HAM10000_LOCALIZATIONS,
+                index=HAM10000_LOCALIZATIONS.index(st.session_state["localization_value"]),
+            )
+            st.session_state["age_value"] = int(age)
+            st.session_state["sex_value"] = sex
+            st.session_state["localization_value"] = localization
+
+        predict = st.button("Run prediction", type="primary", disabled=uploaded_file is None or not api_state["online"])
+
+    with right:
+        if uploaded_file is not None:
             image = Image.open(uploaded_file)
-            st.image(image, use_column_width=True, caption="Uploaded image")
-
-            predict_btn = st.button("Predict", key="predict", type="primary")
-
-            if predict_btn:
-                try:
-                    # Send to API
-                    response = requests.post(
-                        f"{API_URL}/predict",
-                        files={"file": uploaded_file.getvalue()},
-                        timeout=10,
-                    )
-
-                    if response.status_code == 200:
-                        result = response.json()
-
-                        with col2:
-                            st.subheader("Results")
-
-                            # Top prediction
-                            top_pred = result["top_prediction"]
-                            confidence = top_pred["probability"]
-                            class_name = top_pred["class_name"]
-                            is_rare = top_pred["is_rare"]
-
-                            if is_rare:
-                                st.error(
-                                    f"**Rare disease detected**\n\n"
-                                    f"**Diagnosis**: {class_name}\n"
-                                    f"**Confidence**: {confidence * 100:.1f}%\n"
-                                    f"**ICD-10**: {top_pred['icd10']}"
-                                )
-                            else:
-                                st.success(
-                                    f"**Diagnosis**: {class_name}\n\n"
-                                    f"**Confidence**: {confidence * 100:.1f}%\n"
-                                    f"**ICD-10**: {top_pred['icd10']}"
-                                )
-
-                            # Rare disease risk
-                            rare_risk = result["rare_disease_risk"]
-                            st.metric(
-                                "Rare Disease Risk",
-                                f"{rare_risk * 100:.1f}%",
-                                help="Probability that the lesion is rare"
-                            )
-
-                            # Processing time
-                            st.caption(f"Inference time: {result['processing_time_ms']:.0f}ms")
-
-                        # All predictions table
-                        st.divider()
-                        st.subheader("All Class Probabilities")
-
-                        all_preds = result["all_predictions"]
-                        predictions_df = [
-                            {
-                                "Class": p["class_name"],
-                                "Probability": f"{p['probability'] * 100:.2f}%",
-                                "Rare": "Yes" if p["is_rare"] else "No",
-                            }
-                            for p in sorted(all_preds, key=lambda x: x["probability"], reverse=True)
-                        ]
-
-                        st.table(predictions_df)
-
-                        # Disclaimer
-                        st.info(result.get("disclaimer", ""))
-
-                    else:
-                        st.error(f"Backend error: {response.status_code}\n{response.text}")
-
-                except requests.exceptions.ConnectionError:
-                    st.error(
-                        "**Cannot connect to backend.**\n\n"
-                        "Start the API server:\n"
-                        "\`devbox run api\` (in another terminal)"
-                    )
-                except Exception as e:
-                    st.error(f"Error: {str(e)}")
-
+            st.image(image, width="stretch", caption="Uploaded image")
         else:
-            with col2:
-                st.info("Upload an image to get started.")
+            st.info("Upload an image to see the preview and run inference.")
 
-# ──────────────────────────────────────────────────────────────────────────────
-# TAB 2: DATASET INFO
-# ──────────────────────────────────────────────────────────────────────────────
+    if predict and uploaded_file is not None:
+        files = {"file": (uploaded_file.name, uploaded_file.getvalue(), uploaded_file.type or "image/jpeg")}
+        data = {}
+        if is_stage3:
+            data = {"age": str(age), "sex": sex, "localization": localization}
+        try:
+            response = requests.post(f"{API_URL}/predict", files=files, data=data, timeout=30)
+            if not response.ok:
+                st.error(f"Backend error: {response.status_code}\n{response.text}")
+            else:
+                result = response.json()
+                st.session_state["last_result"] = result
+                st.session_state["last_uploaded_name"] = uploaded_file.name
+        except requests.RequestException as exc:
+            st.error(f"Request failed: {exc}")
+
+    result = st.session_state.get("last_result")
+    if result:
+        st.divider()
+        st.caption(f"Last prediction for: {st.session_state.get('last_uploaded_name', 'uploaded image')}")
+        top_pred = result["top_prediction"]
+        summary = (
+            f"Diagnosis: {top_pred['class_name']}\n\n"
+            f"Confidence: {top_pred['probability'] * 100:.1f}%\n\n"
+            f"ICD-10: {top_pred['icd10']}"
+        )
+        if top_pred["is_rare"]:
+            st.error(summary)
+        else:
+            st.success(summary)
+
+        st.metric("Rare disease risk", f"{result['rare_disease_risk'] * 100:.1f}%")
+        st.caption(f"Inference time: {result['processing_time_ms']:.0f} ms")
+
+        st.subheader("All class probabilities")
+        table_rows = [
+            {
+                "Class": pred["class_name"],
+                "Probability": f"{pred['probability'] * 100:.2f}%",
+                "Rare": "Yes" if pred["is_rare"] else "No",
+            }
+            for pred in result["all_predictions"]
+        ]
+        st.table(table_rows)
+        st.info(result.get("disclaimer", ""))
 
 with tab2:
-    st.subheader("Datasets Used")
+    st.markdown(
+        """
+### What you should test
 
-    st.markdown("""
-    | Dataset | Samples | Purpose | Clinical Features |
-    |---|---|---|---|
-    | **ISIC 2019** | 25,331 | Image classification (8 classes) | None |
-    | **HAM10000** | 10,015 | Multimodal (image + metadata) | Age, sex, localization |
-    | **PAD-UFES-20** | 2,298 | Multimodal (image + 22 features) | Smoke, drink, itch, diameter, … |
+1. Open `http://localhost:8000/health` and confirm:
+   - `status` is `ok`
+   - `model_loaded` is `true`
+   - `model_mode` matches the checkpoint you intended to load
 
-    ### Rare Classes (Focus Areas)
-    - **Dermatofibroma (DF)**: Benign fibrous nodule (rare, often misdiagnosed)
-    - **Vascular Lesion (VASC)**: Benign vascular proliferation (rare, similar to melanoma)
-    """)
+2. Upload a dermoscopy image in the frontend.
 
-    st.divider()
+3. For Stage 3, also fill the clinical fields:
+   - age
+   - sex
+   - lesion localization
 
-    col1, col2 = st.columns(2)
+4. Confirm that the app returns:
+   - one top prediction
+   - a table with probabilities for all classes
+   - a rare disease risk score
+   - inference time
 
-    with col1:
-        st.markdown("### Class Distribution (ISIC 2019)")
-        st.markdown("""
-        - Melanoma: 4,522 (17.8%)
-        - Melanocytic Nevi: 12,875 (50.8%)
-        - Benign Keratosis: 2,624 (10.4%)
-        - BCC: 3,323 (13.1%)
-        - Actinic Keratosis: 867 (3.4%)
-        - SCC: 628 (2.5%)
-        - **Vascular Lesion: 253 (1.0%)** rare
-        - **Dermatofibroma: 239 (0.9%)** rare
-        """)
+### Where to get a test image
 
-    with col2:
-        st.markdown("### Class Imbalance Challenge")
-        st.markdown("""
-        Rare classes represent <2% of data:
-        - Standard classifiers can ignore them
-        - Focal loss helps
-        - Weighted sampling helps
-        - Two-stage pre-training helps
-        
-        **Our approach**: MAE pre-training + focal loss + weighted sampling.
-        """)
+- A lesion image from the ISIC archive
+- A sample from the HAM10000 dataset already present in your local `data/raw/HAM10000` folders
 
-# ──────────────────────────────────────────────────────────────────────────────
-# TAB 3: HOW IT WORKS
-# ──────────────────────────────────────────────────────────────────────────────
+If you want a quick local test, you can simply pick any `.jpg` from:
+
+- `data/processed/isic2019/images/`
+- `data/raw/HAM10000/HAM10000_images_part_1/`
+- `data/raw/HAM10000/HAM10000_images_part_2/`
+
+### What a good test looks like
+
+- The backend does not crash
+- The frontend shows a result quickly
+- Repeating the same image gives stable predictions
+- Stage 3 accepts clinical metadata and still returns a prediction cleanly
+        """
+    )
 
 with tab3:
-    st.subheader("Model Architecture")
+    st.markdown(
+        """
+### Model paths
 
-    st.markdown("""
-    ### Two-Stage Training Pipeline
+- Stage 2: image-only classifier trained on ISIC 2019
+- Stage 3: multimodal classifier trained on HAM10000 with age, sex, and localization
 
-    #### Stage 1: Masked Autoencoder (MAE) Pre-training
-    - **Task**: Self-supervised learning on unlabeled dermoscopy images
-    - **Method**: Masks 75% of image patches, learns to reconstruct them
-    - **Goal**: Learn rich visual representations of skin lesions
-    - **Reference**: He et al., "Masked Autoencoders Are Scalable Vision Learners" (CVPR 2022)
+### Important note
 
-    #### Stage 2: Supervised Fine-tuning
-    - **Base**: Pre-trained ViT encoder (from MAE)
-    - **Loss**: Focal loss (γ=2) to handle class imbalance
-    - **Optimization**: Layer-wise LR decay (LLRD=0.75)
-    - **Data**: Weighted random sampling (oversample rare classes)
-    - **Regularization**: Modality dropout (p=0.1) for robustness
+The frontend follows whatever checkpoint the API loaded. If the API is started with a Stage 2 checkpoint,
+the app behaves as image-only. If the API is started with `multimodal_best.pth`, the app enables the
+clinical form and sends those values to the backend.
 
-    ### Features
-    - **Multimodal fusion**: Image + clinical data (age, sex, localization, etc.)
-    - **Late fusion**: Separate encoders → concatenate → MLP head
-    - **Rare disease focus**: Explicit focal loss on rare classes
-    """)
+### Recommended run commands
 
-    st.divider()
-
-    st.subheader("Quick Start")
-    st.code("""
-# 1. Install dependencies
-poetry install
-
-# 2. Download datasets (see scripts/download_data.py for instructions)
-python scripts/download_data.py
-
-# 3. Train Stage 1 (MAE pre-training)
-python scripts/train_stage1_pretrain.py stage1=mae_fast
-
-# 4. Train Stage 2 (fine-tuning)
-python scripts/train_stage2_finetune.py stage1=mae_fast stage2=finetune_fast
-
-# 5. Run API and frontend
+Stage 2:
+```bash
 MODEL_CHECKPOINT=checkpoints/finetune_fast_best.pth python -m uvicorn api.main:app --reload --port 8000
 python -m streamlit run frontend/app.py --server.port 8501
-    """, language="bash")
+```
 
-    st.divider()
-
-    st.subheader("Resources")
-    st.markdown("""
-    - **GitHub**: [RareSight](https://github.com/yourusername/raresight)
-    - **ISIC**: [isic-archive.com](https://isic-archive.com)
-    - **MAE Paper**: [arxiv.org/abs/2111.06377](https://arxiv.org/abs/2111.06377)
-    - **ViT**: [arxiv.org/abs/2010.11929](https://arxiv.org/abs/2010.11929)
-    """)
+Stage 3:
+```bash
+MODEL_MODE=stage3 MODEL_CHECKPOINT=checkpoints/multimodal_best.pth python -m uvicorn api.main:app --reload --port 8000
+python -m streamlit run frontend/app.py --server.port 8501
+```
+        """
+    )

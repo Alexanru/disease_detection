@@ -16,9 +16,9 @@ The repository currently supports two practical workflows:
 
 ## Current Practical Status
 
-- Stage 1 and Stage 2 form the main end-to-end application path.
-- The API and Streamlit app are image-based and use a Stage 2 checkpoint by default.
-- Stage 3 is useful for dissertation experiments, ablation studies, and multimodal analysis, but it is not yet wired into the default app flow.
+- Stage 1 and Stage 2 form the core image-only application path.
+- Stage 3 can now run end-to-end through the same API and frontend when the API is started in Stage 3 mode.
+- Stage 2 is still the default startup mode for quick demos unless you explicitly select Stage 3.
 
 ## Repository Layout
 
@@ -143,7 +143,10 @@ python scripts/train_stage1_pretrain.py --resume-from checkpoints/mae_fast_epoch
 
 ## Running The Application
 
-The default application path is Stage 2 inference.
+The API supports two runtime modes:
+
+- `stage2`: image-only inference on the Stage 2 classifier
+- `stage3`: multimodal inference (image + age + sex + localization)
 
 ### Start the API
 
@@ -157,6 +160,12 @@ If you trained the full Stage 2 model:
 
 ```bash
 MODEL_CHECKPOINT=checkpoints/finetune_best.pth python -m uvicorn api.main:app --reload --port 8000
+```
+
+If you want Stage 3 multimodal inference:
+
+```bash
+MODEL_MODE=stage3 MODEL_CHECKPOINT=checkpoints/multimodal_best.pth python -m uvicorn api.main:app --reload --port 8000
 ```
 
 ### Start the Streamlit frontend
@@ -186,10 +195,17 @@ Expected result:
 
 - `status` should be `ok`
 - `model_loaded` should be `true`
+- `model_mode` should be `stage2` or `stage3` (depending on what you started)
 
 ### Prediction check
 
 Upload a dermoscopy image in the frontend or use the API docs page.
+
+For Stage 3, provide clinical fields in the UI:
+
+- age
+- sex
+- localization
 
 What a good basic result looks like:
 
@@ -209,8 +225,8 @@ For a quick manual sanity check:
 
 ### Limitations
 
-- the current frontend uses the image classifier path
-- Stage 3 is trained and evaluated separately and is not the default inference path in the app
+- no free-text symptom description endpoint is implemented
+- predictions are image-based (plus structured clinical metadata for Stage 3)
 - this project is for research and dissertation use, not clinical deployment
 
 ## Evaluation
