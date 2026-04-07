@@ -1,115 +1,151 @@
 # RareSight
 
-RareSight is a dermatology research project for rare skin lesion detection. It combines self-supervised pretraining, supervised fine-tuning, a FastAPI backend, and a Streamlit frontend.
+RareSight is a dermatology AI project for rare skin lesion detection.
+It supports:
 
-The repository currently supports two practical workflows:
+- Stage 1: self-supervised MAE pretraining
+- Stage 2: supervised image classifier (ISIC 2019)
+- Stage 3: multimodal classifier (image + clinical metadata, HAM10000)
+- FastAPI backend + Streamlit frontend for inference
 
-1. A fast local workflow meant for limited hardware and faster iteration.
-2. A larger full workflow meant for longer training runs and stronger results.
+---
 
-## What The Project Does
+## Table of Contents
 
-- Trains a masked autoencoder on dermoscopy images in Stage 1.
-- Fine-tunes a classifier on ISIC 2019 in Stage 2.
-- Trains a multimodal research model on HAM10000 in Stage 3.
-- Serves predictions through a FastAPI API and a Streamlit UI.
+- [About the App](#about-the-app)
+- [Project Structure](#project-structure)
+- [Requirements](#requirements)
+- [Quick Start (Devbox)](#quick-start-devbox)
+- [Dataset Setup](#dataset-setup)
+- [Training Pipelines](#training-pipelines)
+- [Run the Application](#run-the-application)
+- [How to Test the App](#how-to-test-the-app)
+- [Save Trained Models (GitHub Release)](#save-trained-models-github-release)
+- [Restore on a New Machine](#restore-on-a-new-machine)
+- [Troubleshooting](#troubleshooting)
 
-## Current Practical Status
+---
 
-- Stage 1 and Stage 2 form the core image-only application path.
-- Stage 3 can now run end-to-end through the same API and frontend when the API is started in Stage 3 mode.
-- Stage 2 is still the default startup mode for quick demos unless you explicitly select Stage 3.
+## About the App
 
-## Repository Layout
+RareSight predicts dermatology classes from an uploaded lesion image.
 
-- `src/raresight/`: core models, datasets, training utilities, evaluation helpers
-- `scripts/`: training and evaluation entry points
-- `configs/`: Hydra configuration files for data and training profiles
-- `api/`: FastAPI inference service
-- `frontend/`: Streamlit interface
-- `tests/`: basic model and augmentation tests
+- In **Stage 2 mode**, inference is image-only.
+- In **Stage 3 mode**, inference uses image + clinical fields:
+  - age
+  - sex
+  - lesion localization
 
-## Data
+The frontend automatically adapts to the model mode loaded by the API.
 
-The project uses two datasets in practice:
+---
 
-- `ISIC 2019`: image classification with 8 classes, used in Stage 1 and Stage 2
-- `HAM10000`: image plus metadata, used in Stage 3
+## Project Structure
 
-Expected local layout:
+- `src/raresight/`: models, training, datasets, metrics
+- `scripts/`: Stage 1/2/3 training + evaluation scripts
+- `configs/`: Hydra config files
+- `api/`: FastAPI backend (`api/main.py`)
+- `frontend/`: Streamlit app (`frontend/app.py`)
+- `checkpoints/`: trained model files (`.pth`) (local, ignored by git)
+- `data/`: raw and processed datasets (local, ignored by git)
 
-```text
-data/
-  raw/
-    ISIC_2019_Training_Input/
-    ISIC_2019_Training_GroundTruth.csv
-    HAM10000/
-      HAM10000_metadata.csv
-      HAM10000_images_part_1/
-      HAM10000_images_part_2/
-  processed/
-    isic2019/
-      train.csv
-      val.csv
-      test.csv
-      images/
-    ham10000/
-      train.csv
-      val.csv
-      test.csv
-```
+---
 
-`scripts/download_data.py` prepares the processed CSV splits from the raw datasets already present locally.
+## Requirements
 
-## Environment Setup
+- Python 3.11
+- Poetry
+- Optional: Devbox
+- Optional but recommended: CUDA GPU
 
-### Option A: local virtual environment
+If Devbox is unstable on your machine (Nix issues), use the local venv flow.
 
-```bash
-python -m venv .venv
-source .venv/bin/activate
-pip install poetry==1.8.3
-poetry install
-```
+---
 
-### Option B: Devbox
+## Quick Start (Devbox)
+
+### 1) Enter devbox shell
 
 ```bash
 devbox shell
+```
+
+### 2) Install dependencies
+
+```bash
 devbox run setup
 ```
 
-If Devbox fails because of local Nix issues, use the local virtual environment instead.
+### 3) Prepare folders
 
-## Training Profiles
+```bash
+devbox run prepare
+```
 
-### Fast profile
+This creates local folders like `data/`, `checkpoints/`, `logs/`, `outputs/`.
 
-Use this profile when you want a working system quickly on modest hardware.
+---
 
-- Stage 1: `configs/stage1/mae_fast.yaml`
-- Stage 2: `configs/stage2/finetune_fast.yaml`
-- Stage 3: run Stage 3 with `stage1=mae_fast`
+## Dataset Setup
 
-Commands:
+Download datasets manually, then place files in the exact paths below.
+
+### ISIC 2019
+
+Source:
+- https://challenge.isic-archive.com/data/#2019
+
+Place files:
+- images under `data/raw/ISIC_2019_Training_Input/`
+- ground truth CSV as `data/raw/ISIC_2019_Training_GroundTruth.csv`
+
+### HAM10000
+
+Source:
+- https://www.kaggle.com/datasets/kmader/skin-cancer-mnist-ham10000?resource=download
+
+Place files:
+- `data/raw/HAM10000/HAM10000_metadata.csv`
+- `data/raw/HAM10000/HAM10000_images_part_1/`
+- `data/raw/HAM10000/HAM10000_images_part_2/`
+
+### Build processed splits
+
+```bash
+python scripts/download_data.py
+```
+
+Expected outputs:
+
+- `data/processed/isic2019/{train.csv,val.csv,test.csv,images/}`
+- `data/processed/ham10000/{train.csv,val.csv,test.csv}`
+
+---
+
+## Training Pipelines
+
+### Fast profile (recommended for local runs)
+
+### Stage 1
 
 ```bash
 python scripts/train_stage1_pretrain.py stage1=mae_fast
+```
+
+### Stage 2
+
+```bash
 python scripts/train_stage2_finetune.py stage1=mae_fast stage2=finetune_fast
+```
+
+### Stage 3
+
+```bash
 python scripts/train_stage3_multimodal.py stage1=mae_fast
 ```
 
-Typical checkpoint outputs:
-
-- `checkpoints/mae_fast_best.pth`
-- `checkpoints/finetune_fast_best.pth`
-- `checkpoints/multimodal_best.pth`
-
-### Full profile
-
-Use this profile when training time is less constrained and you want the larger configuration.
-
-Commands:
+### Full profile (longer training)
 
 ```bash
 python scripts/train_stage1_pretrain.py
@@ -117,17 +153,7 @@ python scripts/train_stage2_finetune.py
 python scripts/train_stage3_multimodal.py
 ```
 
-Typical checkpoint outputs:
-
-- `checkpoints/mae_best.pth`
-- `checkpoints/finetune_best.pth`
-- `checkpoints/multimodal_best.pth`
-
-## Resuming Training
-
-All three training scripts support resume mode.
-
-Examples:
+### Resume examples
 
 ```bash
 python scripts/train_stage1_pretrain.py --resume stage1=mae_fast
@@ -135,142 +161,140 @@ python scripts/train_stage2_finetune.py --resume stage1=mae_fast stage2=finetune
 python scripts/train_stage3_multimodal.py --resume stage1=mae_fast
 ```
 
-You can also resume from an explicit checkpoint path:
+---
+
+## Run the Application
+
+Use **two terminals**.
+
+### Stage 2 (image-only mode)
+
+Terminal 1 (API):
 
 ```bash
-python scripts/train_stage1_pretrain.py --resume-from checkpoints/mae_fast_epoch010.pth stage1=mae_fast
+MODEL_CHECKPOINT=checkpoints/finetune_fast_best.pth python -m uvicorn api.main:app --port 8000
 ```
 
-## Running The Application
-
-The API supports two runtime modes:
-
-- `stage2`: image-only inference on the Stage 2 classifier
-- `stage3`: multimodal inference (image + age + sex + localization)
-
-### Start the API
-
-If you trained the fast Stage 2 model:
+Terminal 2 (frontend):
 
 ```bash
-MODEL_CHECKPOINT=checkpoints/finetune_fast_best.pth python -m uvicorn api.main:app --reload --port 8000
+python -m streamlit run frontend/app.py --server.port 8501 --server.fileWatcherType none
 ```
 
-If you trained the full Stage 2 model:
+### Stage 3 (multimodal mode)
+
+Terminal 1 (API):
 
 ```bash
-MODEL_CHECKPOINT=checkpoints/finetune_best.pth python -m uvicorn api.main:app --reload --port 8000
+MODEL_MODE=stage3 MODEL_CHECKPOINT=checkpoints/multimodal_best.pth python -m uvicorn api.main:app --port 8000
 ```
 
-If you want Stage 3 multimodal inference:
+Terminal 2 (frontend):
 
 ```bash
-MODEL_MODE=stage3 MODEL_CHECKPOINT=checkpoints/multimodal_best.pth python -m uvicorn api.main:app --reload --port 8000
+python -m streamlit run frontend/app.py --server.port 8501 --server.fileWatcherType none
 ```
 
-### Start the Streamlit frontend
+Open:
 
-In a second terminal:
+- `http://127.0.0.1:8000/health`
+- `http://127.0.0.1:8000/info`
+- `http://127.0.0.1:8501`
 
-```bash
-python -m streamlit run frontend/app.py --server.port 8501
+---
+
+## How to Test the App
+
+### API sanity checks
+
+1. Open `http://127.0.0.1:8000/health`
+2. Confirm:
+   - `status: ok`
+   - `model_loaded: true`
+   - `model_mode: stage2` or `stage3` (as intended)
+
+### UI inference test
+
+1. Upload a lesion image (`.jpg`/`.png`)
+2. For Stage 3, fill:
+   - age
+   - sex
+   - localization
+3. Click `Run prediction`
+4. Confirm results show:
+   - top class
+   - confidence
+   - rare disease risk
+   - per-class probabilities
+
+Good test images:
+
+- `data/processed/isic2019/images/*.jpg`
+- `data/raw/HAM10000/HAM10000_images_part_1/*.jpg`
+- `data/raw/HAM10000/HAM10000_images_part_2/*.jpg`
+
+---
+
+## Save Trained Models (GitHub Release)
+
+`checkpoints/` is ignored by git, so trained models are **not** pushed with normal commits.
+
+Recommended: upload selected checkpoints to a GitHub Release.
+
+Suggested files:
+
+- `checkpoints/finetune_fast_best.pth`
+- `checkpoints/multimodal_best.pth`
+- optional: `checkpoints/mae_fast_best.pth`
+
+### Steps
+
+1. GitHub repo -> `Releases` -> `Create a new release`
+2. Tag: for example `v1-models`
+3. Title: `RareSight trained checkpoints`
+4. Attach `.pth` files as release assets
+5. Publish
+
+Recommended release description:
+
+```text
+RareSight trained checkpoints for reproducible inference.
+
+Files:
+- finetune_fast_best.pth: Stage 2 image-only model (ISIC 2019)
+- multimodal_best.pth: Stage 3 multimodal model (HAM10000)
+- mae_fast_best.pth (optional): Stage 1 MAE encoder checkpoint
+
+Usage:
+- Stage 2 API:
+  MODEL_CHECKPOINT=checkpoints/finetune_fast_best.pth python -m uvicorn api.main:app --port 8000
+- Stage 3 API:
+  MODEL_MODE=stage3 MODEL_CHECKPOINT=checkpoints/multimodal_best.pth python -m uvicorn api.main:app --port 8000
 ```
 
-Then open:
+---
 
-- API docs: `http://localhost:8000/docs`
-- Frontend: `http://localhost:8501`
+## Restore on a New Machine
 
-## How To Tell If The App Works
+1. Clone repo
+2. Setup environment (`devbox` or local venv)
+3. Download release assets (`.pth`)
+4. Put them in `checkpoints/`
+5. Run API + frontend commands from this README
 
-### Basic health checks
+No retraining is needed if checkpoints are available.
 
-Check the API:
+---
 
-```bash
-curl http://localhost:8000/health
-```
+## Troubleshooting
 
-Expected result:
-
-- `status` should be `ok`
-- `model_loaded` should be `true`
-- `model_mode` should be `stage2` or `stage3` (depending on what you started)
-
-### Prediction check
-
-Upload a dermoscopy image in the frontend or use the API docs page.
-
-For Stage 3, provide clinical fields in the UI:
-
-- age
-- sex
-- localization
-
-What a good basic result looks like:
-
-- the request succeeds without backend errors
-- you get one top prediction and a full class probability list
-- inference time is reported
-- the app does not say it is running in random demo mode
-
-### Sanity-checking the predictions
-
-For a quick manual sanity check:
-
-- similar-looking benign lesions should not jump randomly between all classes
-- probabilities should sum visually to a plausible distribution rather than looking flat every time
-- repeated calls on the same image should give stable predictions
-- the API should behave the same whether you test from Swagger or from the frontend
-
-### Limitations
-
-- no free-text symptom description endpoint is implemented
-- predictions are image-based (plus structured clinical metadata for Stage 3)
-- this project is for research and dissertation use, not clinical deployment
-
-## Evaluation
-
-After training, you can run:
-
-```bash
-python scripts/evaluate.py
-```
-
-This script is intended for the multimodal evaluation workflow and may require adjusting the checkpoint path depending on which profile you trained.
-
-## Important Config Files
-
-- `configs/config.yaml`: base config for Stage 1 and Stage 2
-- `configs/config_stage3.yaml`: base config for Stage 3
-- `configs/data/isic2019.yaml`: ISIC 2019 dataset config
-- `configs/data/ham10000.yaml`: HAM10000 dataset config
-- `configs/stage1/mae.yaml`: full Stage 1 profile
-- `configs/stage1/mae_fast.yaml`: fast Stage 1 profile
-- `configs/stage2/finetune.yaml`: full Stage 2 profile
-- `configs/stage2/finetune_fast.yaml`: fast Stage 2 profile
-
-## Suggested Order Of Work
-
-If you want the fastest path to a working demo:
-
-1. Train Stage 1 fast.
-2. Train Stage 2 fast.
-3. Run the API and frontend with the Stage 2 fast checkpoint.
-4. Train Stage 3 only after the main app path is already working.
-
-If you want the larger experimental version:
-
-1. Train full Stage 1.
-2. Train full Stage 2.
-3. Run the app with the full Stage 2 checkpoint.
-4. Train Stage 3 for multimodal dissertation experiments.
-
-## Notes For GitHub Readers
-
-This project is designed as a research-oriented dermatology pipeline, not just a demo UI. The main value lies in:
-
-- the staged training design
-- handling rare classes in a highly imbalanced dataset
-- supporting both image-only and multimodal experimentation
-- exposing the trained classifier through a simple application layer
+- `gio: ... Operation not supported` in WSL:
+  - harmless; open browser URL manually.
+- Streamlit page reload instability:
+  - run with `--server.fileWatcherType none`.
+- If frontend shows offline:
+  - verify API is running and `/health` returns `model_loaded: true`.
+- If Stage 3 API fails:
+  - verify `MODEL_MODE=stage3`
+  - verify `MODEL_CHECKPOINT=checkpoints/multimodal_best.pth`
+  - verify checkpoint file exists.
