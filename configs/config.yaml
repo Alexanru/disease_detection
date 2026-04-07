@@ -15,6 +15,10 @@ project:
 
 hardware:
   device: "cuda"        # cuda | cpu | mps
-  num_workers: 8
-  pin_memory: true
+  num_workers: 0
+  pin_memory: false
   mixed_precision: true # AMP (fp16)
+
+training:
+  batch_size: 16
+  gradient_accumulation_steps: 4

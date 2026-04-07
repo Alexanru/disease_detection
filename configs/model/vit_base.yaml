@@ -1,0 +1,9 @@
+# configs/model/vit_base.yaml — ViT-Base/16 architecture
+
+arch: "vit_base_patch16"
+patch_size: 16
+img_size: 224
+embed_dim: 768
+depth: 12
+num_heads: 12
+mlp_ratio: 4.0

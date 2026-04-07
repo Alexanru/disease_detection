@@ -1,12 +1,12 @@
-"""api/main.py — RareSight FastAPI backend.
+"""api/main.py - RareSight FastAPI backend.
 
 Endpoints:
-  GET  /health                — liveness probe
-  GET  /info                  — model & dataset info
-  POST /predict               — image (+ optional clinical) → diagnosis
-  POST /predict/batch         — batch prediction
-  GET  /datasets              — dataset statistics
-  GET  /classes               — class descriptions
+  GET  /health                - liveness probe
+  GET  /info                  - model and dataset info
+  POST /predict               - image inference
+  POST /predict/batch         - batch prediction
+  GET  /datasets              - dataset statistics
+  GET  /classes               - class descriptions
 """
 
 from __future__ import annotations
@@ -65,7 +65,16 @@ async def load_model() -> None:
     global _model, _device
 
     import os
-    ckpt_path = os.getenv("MODEL_CHECKPOINT", "checkpoints/stage2_finetune_best.pth")
+    env_ckpt = os.getenv("MODEL_CHECKPOINT")
+    if env_ckpt:
+        ckpt_path = env_ckpt
+    else:
+        candidates = [
+            "checkpoints/finetune_best.pth",
+            "checkpoints/finetune_fast_best.pth",
+            "checkpoints/stage2_finetune_best.pth",
+        ]
+        ckpt_path = next((path for path in candidates if Path(path).exists()), candidates[0])
     _device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     logger.info(f"Device: {_device}")
 
@@ -80,7 +89,7 @@ async def load_model() -> None:
         _model.to(_device).eval()
         logger.success(f"Model loaded from {ckpt_path}")
     else:
-        logger.warning(f"No checkpoint at {ckpt_path} — running in DEMO mode (random weights).")
+        logger.warning(f"No checkpoint at {ckpt_path}; running in demo mode with random weights.")
         import sys
         sys.path.insert(0, "src")
         from raresight.models.classifier import RareDiseaseClassifier

@@ -154,6 +154,8 @@ logs/
 # Temporary files
 tmp/
 temp/
+outputs/
+.codex
 
 # Docker
 .dockerignore

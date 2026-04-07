@@ -13,7 +13,7 @@
   ],
   "shell": {
     "init_hook": [
-      "echo '🔬 RareSight — AI for Early Rare Disease Detection'",
+      "echo 'RareSight - AI for early rare disease detection'",
       "echo ''",
       "echo 'Quick commands:'",
       "echo '  devbox run setup          # Install all dependencies'",
@@ -24,29 +24,35 @@
       "export PYTHONPATH=$PYTHONPATH:$(pwd)/src"
     ],
     "scripts": {
-      "setup": "echo '📦 Installing dependencies...' && poetry install && echo '✅ Setup complete!'",
+      "setup": "echo 'Installing dependencies...' && poetry install && echo 'Setup complete.'",
       
-      "prepare": "echo '📁 Preparing directories...' && mkdir -p data/raw data/processed checkpoints logs outputs && echo '✅ Directories ready'",
+      "prepare": "echo 'Preparing directories...' && mkdir -p data/raw data/processed checkpoints logs outputs && echo 'Directories ready.'",
       
       "download": "poetry run python scripts/download_data.py",
       
       "preprocess": "poetry run python scripts/preprocess.py",
       
-      "train-s1": "echo '🚀 Stage 1: MAE Pre-training' && poetry run python scripts/train_stage1_pretrain.py",
+      "train-s1": "echo 'Stage 1: MAE pretraining' && poetry run python scripts/train_stage1_pretrain.py",
+
+      "train-s1-fast": "echo 'Stage 1: MAE pretraining (fast local profile)' && poetry run python scripts/train_stage1_pretrain.py stage1=mae_fast",
       
-      "train-s2": "echo '🚀 Stage 2: Supervised Fine-tuning' && poetry run python scripts/train_stage2_finetune.py",
+      "train-s2": "echo 'Stage 2: supervised fine-tuning' && poetry run python scripts/train_stage2_finetune.py",
+
+      "train-s2-fast": "echo 'Stage 2: supervised fine-tuning (fast local profile)' && poetry run python scripts/train_stage2_finetune.py stage1=mae_fast stage2=finetune_fast",
       
-      "train-s3": "echo '🚀 Stage 3: Multimodal Transfer Learning' && poetry run python scripts/train_stage3_multimodal.py",
+      "train-s3": "echo 'Stage 3: multimodal transfer learning' && poetry run python scripts/train_stage3_multimodal.py",
       
       "train": "devbox run train-s1 && devbox run train-s2",
+
+      "train-fast": "devbox run train-s1-fast && devbox run train-s2-fast",
       
       "train-all": "devbox run train-s1 && devbox run train-s2 && devbox run train-s3",
       
-      "evaluate": "echo '📊 Evaluating model...' && poetry run python scripts/evaluate.py",
+      "evaluate": "echo 'Evaluating model...' && poetry run python scripts/evaluate.py",
       
-      "api": "echo '🚀 Starting API on http://localhost:8000' && poetry run uvicorn api.main:app --reload --port 8000",
+      "api": "echo 'Starting API on http://localhost:8000' && poetry run uvicorn api.main:app --reload --port 8000",
       
-      "frontend": "echo '🎨 Starting Frontend on http://localhost:8501' && poetry run streamlit run frontend/app.py --server.port 8501",
+      "frontend": "echo 'Starting frontend on http://localhost:8501' && poetry run streamlit run frontend/app.py --server.port 8501",
       
       "app": "echo 'Use two terminals: devbox run api && devbox run frontend'",
       

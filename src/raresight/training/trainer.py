@@ -25,6 +25,7 @@ class Trainer:
         device: torch.device,
         checkpoint_dir: Path,
         mixed_precision: bool = True,
+        gradient_accumulation_steps: int = 1,
         gradient_clip: float = 1.0,
         log_every: int = 50,
         wandb_run=None,
@@ -37,38 +38,52 @@ class Trainer:
         self.checkpoint_dir = Path(checkpoint_dir)
         self.checkpoint_dir.mkdir(parents=True, exist_ok=True)
         self.scaler = GradScaler(enabled=mixed_precision)
+        self.gradient_accumulation_steps = max(1, int(gradient_accumulation_steps))
         self.gradient_clip = gradient_clip
         self.log_every = log_every
         self.wandb = wandb_run
         self.best_metric = float("inf")
+
+    def _forward_batch(self, batch):
+        images = batch["image"].to(self.device, non_blocking=True)
+        if "clinical" in batch:
+            clinical = batch["clinical"].to(self.device, non_blocking=True)
+            return self.model(images, clinical), images
+        return self.model(images), images
 
     # ── Training step ──────────────────────────────────────────────────────────
 
     def train_epoch(self, loader, epoch: int) -> float:
         self.model.train()
         total_loss = 0.0
+        self.optimizer.zero_grad(set_to_none=True)
 
         for step, batch in enumerate(tqdm(loader, desc=f"Train E{epoch}", leave=False)):
-            images = batch["image"].to(self.device, non_blocking=True)
-
-            self.optimizer.zero_grad(set_to_none=True)
             with autocast(enabled=self.scaler.is_enabled()):
                 if self.loss_fn is None:
                     # MAE: model returns dict with 'loss'
+                    images = batch["image"].to(self.device, non_blocking=True)
                     out = self.model(images)
                     loss = out["loss"]
                 else:
                     labels = batch["label"].to(self.device, non_blocking=True)
-                    logits = self.model(images)
+                    logits, _ = self._forward_batch(batch)
                     loss = self.loss_fn(logits, labels)
 
-            self.scaler.scale(loss).backward()
-            self.scaler.unscale_(self.optimizer)
-            torch.nn.utils.clip_grad_norm_(self.model.parameters(), self.gradient_clip)
-            self.scaler.step(self.optimizer)
-            self.scaler.update()
-
             total_loss += loss.item()
+            scaled_loss = loss / self.gradient_accumulation_steps
+            self.scaler.scale(scaled_loss).backward()
+
+            should_step = (
+                (step + 1) % self.gradient_accumulation_steps == 0
+                or (step + 1) == len(loader)
+            )
+            if should_step:
+                self.scaler.unscale_(self.optimizer)
+                torch.nn.utils.clip_grad_norm_(self.model.parameters(), self.gradient_clip)
+                self.scaler.step(self.optimizer)
+                self.scaler.update()
+                self.optimizer.zero_grad(set_to_none=True)
 
             if step % self.log_every == 0:
                 lr = self.optimizer.param_groups[0]["lr"]
@@ -86,10 +101,9 @@ class Trainer:
         total_loss, correct, total = 0.0, 0, 0
 
         for batch in tqdm(loader, desc="Val", leave=False):
-            images = batch["image"].to(self.device, non_blocking=True)
             labels = batch["label"].to(self.device, non_blocking=True)
             with autocast(enabled=self.scaler.is_enabled()):
-                logits = self.model(images)
+                logits, _ = self._forward_batch(batch)
                 loss = self.loss_fn(logits, labels)
 
             total_loss += loss.item()

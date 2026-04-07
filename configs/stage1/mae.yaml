@@ -21,7 +21,7 @@ img_size: 224
 
 training:
   epochs: 100             # Can increase to 200+ for better results
-  batch_size: 64          # Reduce to 32 if GPU memory limited
+  batch_size: 16          # Safer default on consumer GPUs; use accumulation for larger effective batch
   optimizer: "adamw"
   lr: 1.5e-4
   weight_decay: 0.05

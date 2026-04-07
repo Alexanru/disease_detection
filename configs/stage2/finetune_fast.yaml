@@ -1,0 +1,33 @@
+# configs/stage2/finetune_fast.yaml — Faster local fine-tuning profile
+method: "finetune"
+
+pretrained_checkpoint: "checkpoints/mae_fast_best.pth"
+
+model:
+  num_classes: 8
+  dropout: 0.1
+
+loss:
+  type: "focal"
+  gamma: 2.0
+  alpha: "auto"
+  label_smoothing: 0.1
+
+training:
+  epochs: 12
+  batch_size: 32
+  lr: 5e-5
+  weight_decay: 0.01
+  gradient_clip: 1.0
+  early_stopping_patience: 5
+  checkpoint_name: "finetune_fast"
+
+layer_decay: 0.75
+
+sampler:
+  type: "weighted_random"
+  oversample_minority: true
+
+wandb:
+  project: "raresight"
+  tags: ["stage2", "finetune", "fast-local"]

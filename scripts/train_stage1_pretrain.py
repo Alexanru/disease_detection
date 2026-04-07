@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""scripts/train_stage1_pretrain.py — Stage 1: MAE self-supervised pretraining.
+"""scripts/train_stage1_pretrain.py - Stage 1: MAE self-supervised pretraining.
 
 Usage:
     python scripts/train_stage1_pretrain.py
@@ -7,15 +7,32 @@ Usage:
     python scripts/train_stage1_pretrain.py --resume              # Resume from best checkpoint
     python scripts/train_stage1_pretrain.py --resume-from outputs/mae_epoch050.pth
 """
+import os
+os.environ["TMPDIR"] = "/tmp"
+os.environ["WANDB_DISABLED"] = "true"
+
+import torch
+torch.multiprocessing.set_sharing_strategy("file_system")
+
 
 import argparse
 import sys
+
+import torch.multiprocessing as mp
+
+try:
+    mp.set_start_method("spawn", force=True)
+except RuntimeError:
+    pass
+
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent.parent / "src"))
 
 import hydra
 import torch
+torch.multiprocessing.set_sharing_strategy("file_system")
+
 import wandb
 from loguru import logger
 from omegaconf import DictConfig, OmegaConf
@@ -27,38 +44,43 @@ from raresight.models.mae import MaskedAutoencoder
 from raresight.training.trainer import Trainer
 
 
-@hydra.main(config_path="../configs", config_name="config", version_base="1.3")
-def main(cfg: DictConfig) -> None:
-    # ── Resume argument parsing ───────────────────────────────────────────────
+def _extract_resume_args(argv: list[str]) -> argparse.Namespace:
+    """Strip custom resume args before Hydra parses CLI options."""
     parser = argparse.ArgumentParser(add_help=False)
     parser.add_argument("--resume", action="store_true", help="Resume from best checkpoint")
     parser.add_argument("--resume-from", type=str, default=None, help="Resume from specific checkpoint")
-    try:
-        args, _ = parser.parse_known_args()
-    except:
-        args = argparse.Namespace(resume=False, resume_from=None)
-    
+    args, remaining = parser.parse_known_args(argv[1:])
+    sys.argv = [argv[0], *remaining]
+    return args
+
+
+RESUME_ARGS = _extract_resume_args(sys.argv.copy())
+
+
+@hydra.main(config_path="../configs", config_name="config", version_base="1.3")
+def main(cfg: DictConfig) -> None:
     torch.manual_seed(cfg.project.seed)
     device = torch.device(cfg.hardware.device if torch.cuda.is_available() else "cpu")
 
     logger.info("=" * 60)
-    logger.info("  RareSight — Stage 1: MAE Pretraining")
+    logger.info("  RareSight - Stage 1: MAE pretraining")
     logger.info("=" * 60)
     logger.info(OmegaConf.to_yaml(cfg))
 
     # ── Dataset ────────────────────────────────────────────────────────────────
     transform = build_mae_transform(cfg.data.image_size)
     dataset = UnlabeledImageDataset(
-        Path(cfg.data.root) / "images",
+        Path(cfg.data.root),
         transform=transform,
     )
     loader = torch.utils.data.DataLoader(
         dataset,
         batch_size=cfg.stage1.training.batch_size,
         shuffle=True,
-        num_workers=cfg.hardware.num_workers,
-        pin_memory=cfg.hardware.pin_memory,
+        num_workers=0,
+        pin_memory=False,
         drop_last=True,
+        persistent_workers=False,
     )
     logger.info(f"Dataset: {len(dataset):,} images | batches: {len(loader)}")
 
@@ -98,15 +120,16 @@ def main(cfg: DictConfig) -> None:
         device=device,
         checkpoint_dir=Path(cfg.project.checkpoint_dir),
         mixed_precision=cfg.hardware.mixed_precision,
+        gradient_accumulation_steps=cfg.training.gradient_accumulation_steps,
         wandb_run=run,
     )
 
     # ── Resume from checkpoint ────────────────────────────────────────────────
     start_epoch = 1
-    if args.resume_from:
-        logger.info(f"Resuming from: {args.resume_from}")
-        start_epoch = trainer.load_checkpoint(args.resume_from, load_optimizer=True)
-    elif args.resume:
+    if RESUME_ARGS.resume_from:
+        logger.info(f"Resuming from: {RESUME_ARGS.resume_from}")
+        start_epoch = trainer.load_checkpoint(RESUME_ARGS.resume_from, load_optimizer=True)
+    elif RESUME_ARGS.resume:
         best_checkpoint = Path(cfg.project.checkpoint_dir) / f"{cfg.stage1.training.checkpoint_name}_best.pth"
         if best_checkpoint.exists():
             logger.info("Resuming from best checkpoint")
@@ -131,7 +154,7 @@ def main(cfg: DictConfig) -> None:
         # Always track best
         trainer.save_best(epoch, {"val/loss": train_loss}, cfg.stage1.training.checkpoint_name)
 
-    logger.success("Stage 1 pretraining complete ✓")
+    logger.success("Stage 1 pretraining complete.")
     if run:
         run.finish()
 

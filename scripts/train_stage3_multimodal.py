@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""scripts/train_stage3_multimodal.py — Stage 3: Multimodal fusion training.
+"""scripts/train_stage3_multimodal.py - Stage 3: multimodal fusion training.
 
 Loads MAE checkpoint from Stage 1, adds multimodal fusion (image + clinical).
 Trains on HAM10000 with age, sex, localization features.
@@ -32,31 +32,36 @@ from raresight.training.losses import build_loss
 from raresight.training.trainer import Trainer
 
 
-@hydra.main(config_path="../configs", config_name="config", version_base="1.3")
-def main(cfg: DictConfig) -> None:
-    # ── Resume argument parsing ───────────────────────────────────────────────
+def _extract_resume_args(argv: list[str]) -> argparse.Namespace:
+    """Strip custom resume args before Hydra parses CLI options."""
     parser = argparse.ArgumentParser(add_help=False)
     parser.add_argument("--resume", action="store_true", help="Resume from best checkpoint")
     parser.add_argument("--resume-from", type=str, default=None, help="Resume from specific checkpoint")
-    try:
-        args, _ = parser.parse_known_args()
-    except:
-        args = argparse.Namespace(resume=False, resume_from=None)
-    
+    args, remaining = parser.parse_known_args(argv[1:])
+    sys.argv = [argv[0], *remaining]
+    return args
+
+
+RESUME_ARGS = _extract_resume_args(sys.argv.copy())
+
+
+@hydra.main(config_path="../configs", config_name="config_stage3", version_base="1.3")
+def main(cfg: DictConfig) -> None:
     torch.manual_seed(cfg.project.seed)
     device = torch.device(cfg.hardware.device if torch.cuda.is_available() else "cpu")
 
     logger.info("=" * 60)
-    logger.info("  RareSight — Stage 3: Multimodal Fusion Training")
+    logger.info("  RareSight - Stage 3: multimodal fusion training")
     logger.info("=" * 60)
 
     # ── Data ──────────────────────────────────────────────────────────────────
     loaders = build_multimodal_loaders(
-        data_root=cfg.data.root_multimodal,
-        dataset_name="ham10000",
+        data_root=cfg.data.root,
+        dataset_name=cfg.data.name,
         batch_size=cfg.stage3.training.batch_size,
         num_workers=cfg.hardware.num_workers,
         image_size=cfg.data.image_size,
+        pin_memory=cfg.hardware.pin_memory,
     )
 
     # ── Model ─────────────────────────────────────────────────────────────────
@@ -65,7 +70,7 @@ def main(cfg: DictConfig) -> None:
 
     model = MultimodalFusionModel(
         num_classes=cfg.stage3.model.num_classes,
-        clinical_dim=16,  # HAM10000: age, sex, 14 locations
+        clinical_dim=cfg.data.clinical_dim,
         encoder_cfg=encoder_cfg,
         clinical_hidden=128,
         clinical_embed=256,
@@ -75,17 +80,12 @@ def main(cfg: DictConfig) -> None:
     )
 
     # Load MAE weights from Stage 1
-    ckpt = cfg.stage1.checkpoint_path
+    ckpt = Path(cfg.project.checkpoint_dir) / f"{cfg.stage1.training.checkpoint_name}_best.pth"
     if Path(ckpt).exists():
         logger.info(f"Loading MAE weights from {ckpt}")
-        mae_state = torch.load(ckpt, map_location=device)
-        # Extract image encoder state dict
-        try:
-            model.image_encoder.load_state_dict(mae_state)
-        except:
-            logger.warning("Could not load exact MAE weights, proceeding with random init")
+        model.load_mae_weights(str(ckpt))
     else:
-        logger.warning(f"No checkpoint found at {ckpt} — training from scratch.")
+        logger.warning(f"No checkpoint found at {ckpt}; training from scratch.")
 
     n_params = sum(p.numel() for p in model.parameters()) / 1e6
     logger.info(f"Multimodal model parameters: {n_params:.1f}M")
@@ -117,7 +117,7 @@ def main(cfg: DictConfig) -> None:
         if run:
             run.watch(model, log_freq=100)
     except Exception:
-        logger.warning("W&B not available — skipping.")
+        logger.warning("W&B not available; skipping.")
 
     # ── Trainer ───────────────────────────────────────────────────────────────
     trainer = Trainer(
@@ -128,6 +128,7 @@ def main(cfg: DictConfig) -> None:
         device=device,
         checkpoint_dir=Path(cfg.project.checkpoint_dir),
         mixed_precision=cfg.hardware.mixed_precision,
+        gradient_accumulation_steps=cfg.training.gradient_accumulation_steps,
         gradient_clip=cfg.stage3.training.gradient_clip,
         wandb_run=run,
     )
@@ -135,10 +136,10 @@ def main(cfg: DictConfig) -> None:
     # ── Resume from checkpoint ────────────────────────────────────────────────
     start_epoch = 1
     epochs_no_improve = 0
-    if args.resume_from:
-        logger.info(f"Resuming from: {args.resume_from}")
-        start_epoch = trainer.load_checkpoint(args.resume_from, load_optimizer=True)
-    elif args.resume:
+    if RESUME_ARGS.resume_from:
+        logger.info(f"Resuming from: {RESUME_ARGS.resume_from}")
+        start_epoch = trainer.load_checkpoint(RESUME_ARGS.resume_from, load_optimizer=True)
+    elif RESUME_ARGS.resume:
         best_checkpoint = Path(cfg.project.checkpoint_dir) / f"{cfg.stage3.training.checkpoint_name}_best.pth"
         if best_checkpoint.exists():
             logger.info("Resuming from best checkpoint")
@@ -174,7 +175,7 @@ def main(cfg: DictConfig) -> None:
             epochs_no_improve = 0
 
     # ── Final test evaluation ─────────────────────────────────────────────────
-    logger.info("Running final test evaluation …")
+    logger.info("Running final test evaluation")
     best_ckpt = Path(cfg.project.checkpoint_dir) / f"{cfg.stage3.training.checkpoint_name}_best.pth"
     if best_ckpt.exists():
         state = torch.load(best_ckpt, map_location=device)
@@ -186,7 +187,7 @@ def main(cfg: DictConfig) -> None:
         if run:
             run.log({"test/loss": test_metrics["val/loss"], "test/acc": test_metrics["val/acc"]})
 
-    logger.success("Stage 3 multimodal training complete ✓")
+    logger.success("Stage 3 multimodal training complete.")
     if run:
         run.finish()
 

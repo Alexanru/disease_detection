@@ -1,12 +1,12 @@
 #!/usr/bin/env python3
-"""scripts/evaluate.py — Full evaluation with ablation study.
+"""scripts/evaluate.py - Full evaluation with ablation study.
 
 Runs three conditions for the multimodal model and produces:
-  • Per-class metrics (AUC, F1, AP)
-  • Confusion matrix (saved as PNG)
-  • Grad-CAM visualizations on test samples
-  • Ablation table: image-only | clinical-only | multimodal
-  • Comparison vs. literature (ISIC 2019 SOTA)
+  - Per-class metrics (AUC, F1, AP)
+  - Confusion matrix (saved as PNG)
+  - Grad-CAM visualizations on test samples
+  - Ablation table: image-only | clinical-only | multimodal
+  - Comparison vs. literature (ISIC 2019 SOTA)
 """
 
 import sys
@@ -127,11 +127,12 @@ def plot_ablation_table(ablation: dict, path: Path) -> None:
 
 
 def main() -> None:
-    logger.info("RareSight — Full Evaluation Pipeline")
+    logger.info("RareSight - Full Evaluation Pipeline")
 
     dataset_name  = "ham10000"
     num_classes   = 7
-    ckpt_path     = "checkpoints/stage2_finetune_best.pth"
+    candidates    = ["checkpoints/multimodal_best.pth", "checkpoints/finetune_best.pth", "checkpoints/finetune_fast_best.pth"]
+    ckpt_path     = next((path for path in candidates if Path(path).exists()), candidates[0])
     data_root     = f"data/processed/{dataset_name}"
 
     # ── Load data & model ────────────────────────────────────────────────────
@@ -139,7 +140,7 @@ def main() -> None:
     model   = load_multimodal_model(ckpt_path, dataset_name, num_classes)
 
     # ── Ablation study ────────────────────────────────────────────────────────
-    logger.info("Running ablation study …")
+    logger.info("Running ablation study")
     ablation = run_ablation(model, loaders["test"], num_classes)
     plot_ablation_table(ablation, OUT)
 

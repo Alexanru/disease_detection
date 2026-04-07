@@ -1,4 +1,4 @@
-"""frontend/app.py — RareSight Streamlit frontend.
+"""frontend/app.py - RareSight Streamlit frontend.
 
 A demo UI for the RareSight multimodal dermatology classification system.
 Connect to the FastAPI backend (api/main.py) for predictions.
@@ -20,8 +20,8 @@ API_URL = os.getenv("API_URL", "http://localhost:8000")
 DEMO_MODE = os.getenv("DEMO_MODE", "false").lower() == "true"
 
 st.set_page_config(
-    page_title="🔬 RareSight — Rare Dermatology Detection",
-    page_icon="🔬",
+    page_title="RareSight",
+    page_icon="R",
     layout="wide",
     initial_sidebar_state="collapsed",
 )
@@ -30,36 +30,36 @@ st.set_page_config(
 
 with st.sidebar:
     st.markdown("""
-    ## 🔬 **RareSight**
+    ## **RareSight**
     Early Detection of Rare Dermatological Conditions via AI
 
     ---
     
-    ### 📊 About
+    ### About
     - **Datasets**: ISIC 2019, HAM10000, PAD-UFES-20
     - **Model**: ViT-based classifier (MAE pre-trained)
     - **Task**: Binary rare-disease detection + multi-class classification
     
-    ### ⚠️ Disclaimer
+    ### Disclaimer
     **For research purposes only.**  
     Not a clinical diagnostic tool.
     """)
 
-    api_status = "❌ Offline"
+    api_status = "Offline"
     try:
         resp = requests.get(f"{API_URL}/health", timeout=2)
         if resp.status_code == 200:
-            api_status = "✅ Online"
+            api_status = "Online"
     except:
-        api_status = "❌ Offline"
+        api_status = "Offline"
 
     st.markdown(f"**API Status**: {api_status}")
-    if api_status == "❌ Offline":
+    if api_status == "Offline":
         st.warning("Backend not responding. Ensure `devbox run api` is running on another terminal.")
 
 # ── Header ───────────────────────────────────────────────────────────────────
 
-st.markdown("# 🔬 RareSight")
+st.markdown("# RareSight")
 st.markdown("""
 **Early Detection of Rare Dermatological Conditions**
 
@@ -71,7 +71,7 @@ st.divider()
 
 # ── Tab layout ───────────────────────────────────────────────────────────────
 
-tab1, tab2, tab3 = st.tabs(["📸 Diagnosis", "📊 Dataset Info", "ℹ️ How It Works"])
+tab1, tab2, tab3 = st.tabs(["Diagnosis", "Dataset Info", "How It Works"])
 
 # ──────────────────────────────────────────────────────────────────────────────
 # TAB 1: DIAGNOSIS
@@ -81,7 +81,7 @@ with tab1:
     col1, col2 = st.columns([1, 1], gap="large")
 
     with col1:
-        st.subheader("📤 Upload Image")
+        st.subheader("Upload Image")
         uploaded_file = st.file_uploader(
             "Choose a dermoscopy image (JPG, PNG):",
             type=["jpg", "jpeg", "png"],
@@ -92,7 +92,7 @@ with tab1:
             image = Image.open(uploaded_file)
             st.image(image, use_column_width=True, caption="Uploaded image")
 
-            predict_btn = st.button("🔍 Predict", key="predict", type="primary")
+            predict_btn = st.button("Predict", key="predict", type="primary")
 
             if predict_btn:
                 try:
@@ -107,7 +107,7 @@ with tab1:
                         result = response.json()
 
                         with col2:
-                            st.subheader("🎯 Results")
+                            st.subheader("Results")
 
                             # Top prediction
                             top_pred = result["top_prediction"]
@@ -117,14 +117,14 @@ with tab1:
 
                             if is_rare:
                                 st.error(
-                                    f"⚠️ **RARE DISEASE DETECTED**\n\n"
+                                    f"**Rare disease detected**\n\n"
                                     f"**Diagnosis**: {class_name}\n"
                                     f"**Confidence**: {confidence * 100:.1f}%\n"
                                     f"**ICD-10**: {top_pred['icd10']}"
                                 )
                             else:
                                 st.success(
-                                    f"✅ **Diagnosis**: {class_name}\n\n"
+                                    f"**Diagnosis**: {class_name}\n\n"
                                     f"**Confidence**: {confidence * 100:.1f}%\n"
                                     f"**ICD-10**: {top_pred['icd10']}"
                                 )
@@ -138,18 +138,18 @@ with tab1:
                             )
 
                             # Processing time
-                            st.caption(f"⏱️ Inference time: {result['processing_time_ms']:.0f}ms")
+                            st.caption(f"Inference time: {result['processing_time_ms']:.0f}ms")
 
                         # All predictions table
                         st.divider()
-                        st.subheader("📋 All Class Probabilities")
+                        st.subheader("All Class Probabilities")
 
                         all_preds = result["all_predictions"]
                         predictions_df = [
                             {
                                 "Class": p["class_name"],
                                 "Probability": f"{p['probability'] * 100:.2f}%",
-                                "Rare": "⚠️ Yes" if p["is_rare"] else "—",
+                                "Rare": "Yes" if p["is_rare"] else "No",
                             }
                             for p in sorted(all_preds, key=lambda x: x["probability"], reverse=True)
                         ]
@@ -164,23 +164,23 @@ with tab1:
 
                 except requests.exceptions.ConnectionError:
                     st.error(
-                        "❌ **Cannot connect to backend.**\n\n"
+                        "**Cannot connect to backend.**\n\n"
                         "Start the API server:\n"
                         "\`devbox run api\` (in another terminal)"
                     )
                 except Exception as e:
-                    st.error(f"❌ Error: {str(e)}")
+                    st.error(f"Error: {str(e)}")
 
         else:
             with col2:
-                st.info("👈 Upload an image to get started.")
+                st.info("Upload an image to get started.")
 
 # ──────────────────────────────────────────────────────────────────────────────
 # TAB 2: DATASET INFO
 # ──────────────────────────────────────────────────────────────────────────────
 
 with tab2:
-    st.subheader("📊 Datasets Used")
+    st.subheader("Datasets Used")
 
     st.markdown("""
     | Dataset | Samples | Purpose | Clinical Features |
@@ -207,18 +207,18 @@ with tab2:
         - BCC: 3,323 (13.1%)
         - Actinic Keratosis: 867 (3.4%)
         - SCC: 628 (2.5%)
-        - **Vascular Lesion: 253 (1.0%)** ⚠️ RARE
-        - **Dermatofibroma: 239 (0.9%)** ⚠️ RARE
+        - **Vascular Lesion: 253 (1.0%)** rare
+        - **Dermatofibroma: 239 (0.9%)** rare
         """)
 
     with col2:
         st.markdown("### Class Imbalance Challenge")
         st.markdown("""
         Rare classes represent <2% of data:
-        - ❌ Standard classifiers ignore them
-        - ✅ Focal loss helps
-        - ✅ Weighted sampling helps
-        - ✅ Two-stage pre-training helps
+        - Standard classifiers can ignore them
+        - Focal loss helps
+        - Weighted sampling helps
+        - Two-stage pre-training helps
         
         **Our approach**: MAE pre-training + focal loss + weighted sampling.
         """)
@@ -228,7 +228,7 @@ with tab2:
 # ──────────────────────────────────────────────────────────────────────────────
 
 with tab3:
-    st.subheader("🏗️ Model Architecture")
+    st.subheader("Model Architecture")
 
     st.markdown("""
     ### Two-Stage Training Pipeline
@@ -254,28 +254,28 @@ with tab3:
 
     st.divider()
 
-    st.subheader("🚀 Quick Start")
+    st.subheader("Quick Start")
     st.code("""
 # 1. Install dependencies
 poetry install
 
 # 2. Download datasets (see scripts/download_data.py for instructions)
-make download
+python scripts/download_data.py
 
 # 3. Train Stage 1 (MAE pre-training)
-make train-s1
+python scripts/train_stage1_pretrain.py stage1=mae_fast
 
 # 4. Train Stage 2 (fine-tuning)
-make train-s2
+python scripts/train_stage2_finetune.py stage1=mae_fast stage2=finetune_fast
 
 # 5. Run API and frontend
-make api      # terminal 1
-make frontend # terminal 2
+MODEL_CHECKPOINT=checkpoints/finetune_fast_best.pth python -m uvicorn api.main:app --reload --port 8000
+python -m streamlit run frontend/app.py --server.port 8501
     """, language="bash")
 
     st.divider()
 
-    st.subheader("📚 Resources")
+    st.subheader("Resources")
     st.markdown("""
     - **GitHub**: [RareSight](https://github.com/yourusername/raresight)
     - **ISIC**: [isic-archive.com](https://isic-archive.com)

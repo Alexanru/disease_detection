@@ -1,0 +1,53 @@
+# configs/config_stage3.yaml — base config for Stage 3 multimodal training
+defaults:
+  - data: ham10000
+  - model: vit_base
+  - stage1: mae
+  - _self_
+
+project:
+  name: "raresight"
+  seed: 42
+  output_dir: "outputs"
+  checkpoint_dir: "checkpoints"
+  log_dir: "logs"
+
+hardware:
+  device: "cuda"
+  num_workers: 0
+  pin_memory: false
+  mixed_precision: true
+
+training:
+  batch_size: 16
+  gradient_accumulation_steps: 4
+
+stage3:
+  model:
+    num_classes: 7
+    dropout: 0.1
+
+  loss:
+    type: "focal"
+    gamma: 2.0
+    alpha: null
+
+  training:
+    epochs: 30
+    batch_size: 16
+    lr: 5e-5
+    weight_decay: 1e-4
+    gradient_clip: 1.0
+    checkpoint_name: "multimodal"
+    save_every: 5
+    early_stopping_patience: 10
+
+  sampler:
+    type: "weighted_random"
+    oversample_rare: true
+
+  wandb:
+    project: "raresight-stage3"
+    tags: ["multimodal", "ham10000", "transfer-learning"]
+
+  layer_decay: 0.75

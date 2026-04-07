@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""scripts/train_stage2_finetune.py — Stage 2: Supervised fine-tuning.
+"""scripts/train_stage2_finetune.py - Stage 2: Supervised fine-tuning.
 
 Loads the MAE-pretrained encoder, adds a classification head,
 and fine-tunes with focal loss + weighted sampling for rare classes.
@@ -10,6 +10,12 @@ Usage:
     python scripts/train_stage2_finetune.py --resume              # Resume from best checkpoint
     python scripts/train_stage2_finetune.py --resume-from outputs/finetune_epoch025.pth
 """
+import os
+os.environ["TMPDIR"] = "/tmp"
+os.environ["WANDB_DISABLED"] = "true"
+
+import torch
+torch.multiprocessing.set_sharing_strategy("file_system")
 
 import argparse
 import sys
@@ -32,32 +38,51 @@ from raresight.training.losses import build_loss
 from raresight.training.trainer import Trainer
 
 
-@hydra.main(config_path="../configs", config_name="config", version_base="1.3")
-def main(cfg: DictConfig) -> None:
-    # ── Resume argument parsing ───────────────────────────────────────────────
+def _resolve_split_root(data_root: str | Path) -> Path:
+    """Stage 2 expects train/val/test CSVs; accept either split dir or image dir."""
+    data_root = Path(data_root)
+    if (data_root / "train.csv").exists():
+        return data_root
+
+    parent = data_root.parent
+    if (parent / "train.csv").exists():
+        return parent
+
+    return data_root
+
+
+def _extract_resume_args(argv: list[str]) -> argparse.Namespace:
+    """Strip custom resume args before Hydra parses CLI options."""
     parser = argparse.ArgumentParser(add_help=False)
     parser.add_argument("--resume", action="store_true", help="Resume from best checkpoint")
     parser.add_argument("--resume-from", type=str, default=None, help="Resume from specific checkpoint")
-    try:
-        args, _ = parser.parse_known_args()
-    except:
-        args = argparse.Namespace(resume=False, resume_from=None)
-    
+    args, remaining = parser.parse_known_args(argv[1:])
+    sys.argv = [argv[0], *remaining]
+    return args
+
+
+RESUME_ARGS = _extract_resume_args(sys.argv.copy())
+
+
+@hydra.main(config_path="../configs", config_name="config", version_base="1.3")
+def main(cfg: DictConfig) -> None:
     torch.manual_seed(cfg.project.seed)
     device = torch.device(cfg.hardware.device if torch.cuda.is_available() else "cpu")
 
     logger.info("=" * 60)
-    logger.info("  RareSight — Stage 2: Supervised Fine-Tuning")
+    logger.info("  RareSight - Stage 2: supervised fine-tuning")
     logger.info("=" * 60)
 
     # ── Data ──────────────────────────────────────────────────────────────────
+    split_root = _resolve_split_root(cfg.data.root)
     loaders = build_dataloaders(
-        data_root=cfg.data.root,
+        data_root=split_root,
         batch_size=cfg.stage2.training.batch_size,
         num_workers=cfg.hardware.num_workers,
         image_size=cfg.data.image_size,
         use_weighted_sampler=(cfg.stage2.sampler.type == "weighted_random"),
     )
+    logger.info(f"Using data splits from {split_root}")
 
     # ── Model ─────────────────────────────────────────────────────────────────
     encoder_cfg = OmegaConf.to_container(cfg.stage1.encoder, resolve=True)
@@ -74,7 +99,7 @@ def main(cfg: DictConfig) -> None:
         model.load_mae_weights(ckpt)
         logger.info(f"Loaded MAE weights from {ckpt}")
     else:
-        logger.warning(f"No checkpoint found at {ckpt} — training from scratch.")
+        logger.warning(f"No checkpoint found at {ckpt}; training from scratch.")
 
     n_params = sum(p.numel() for p in model.parameters()) / 1e6
     logger.info(f"Classifier parameters: {n_params:.1f}M")
@@ -110,7 +135,7 @@ def main(cfg: DictConfig) -> None:
         if run:
             run.watch(model, log_freq=100)
     except Exception:
-        logger.warning("W&B not available — skipping.")
+        logger.warning("W&B not available; skipping.")
 
     # ── Trainer ───────────────────────────────────────────────────────────────
     trainer = Trainer(
@@ -121,6 +146,7 @@ def main(cfg: DictConfig) -> None:
         device=device,
         checkpoint_dir=Path(cfg.project.checkpoint_dir),
         mixed_precision=cfg.hardware.mixed_precision,
+        gradient_accumulation_steps=cfg.training.gradient_accumulation_steps,
         gradient_clip=cfg.stage2.training.gradient_clip,
         wandb_run=run,
     )
@@ -128,10 +154,10 @@ def main(cfg: DictConfig) -> None:
     # ── Resume from checkpoint ────────────────────────────────────────────────
     start_epoch = 1
     epochs_no_improve = 0
-    if args.resume_from:
-        logger.info(f"Resuming from: {args.resume_from}")
-        start_epoch = trainer.load_checkpoint(args.resume_from, load_optimizer=True)
-    elif args.resume:
+    if RESUME_ARGS.resume_from:
+        logger.info(f"Resuming from: {RESUME_ARGS.resume_from}")
+        start_epoch = trainer.load_checkpoint(RESUME_ARGS.resume_from, load_optimizer=True)
+    elif RESUME_ARGS.resume:
         best_checkpoint = Path(cfg.project.checkpoint_dir) / f"{cfg.stage2.training.checkpoint_name}_best.pth"
         if best_checkpoint.exists():
             logger.info("Resuming from best checkpoint")
@@ -167,7 +193,7 @@ def main(cfg: DictConfig) -> None:
             epochs_no_improve = 0
 
     # ── Final test evaluation ─────────────────────────────────────────────────
-    logger.info("Running final test evaluation …")
+    logger.info("Running final test evaluation")
     best_ckpt = Path(cfg.project.checkpoint_dir) / f"{cfg.stage2.training.checkpoint_name}_best.pth"
     if best_ckpt.exists():
         state = torch.load(best_ckpt, map_location=device)
@@ -183,7 +209,7 @@ def main(cfg: DictConfig) -> None:
         run.log(results.to_dict())
         run.finish()
 
-    logger.success("Stage 2 fine-tuning complete ✓")
+    logger.success("Stage 2 fine-tuning complete.")
 
 
 if __name__ == "__main__":

@@ -1,4 +1,4 @@
-"""scripts/preprocess.py — Dataset preprocessing stub.
+"""scripts/preprocess.py - Dataset preprocessing stub.
 
 This script prepares raw datasets for training. It handles:
 - Download verification
@@ -29,7 +29,7 @@ def setup_directories():
     CHECKPOINTS_DIR.mkdir(exist_ok=True)
     (DATA_DIR / "raw").mkdir(exist_ok=True)
     (DATA_DIR / "processed").mkdir(exist_ok=True)
-    logger.info(f"✅ Directories ready: {DATA_DIR}, {CHECKPOINTS_DIR}")
+    logger.info(f"Directories ready: {DATA_DIR}, {CHECKPOINTS_DIR}")
 
 
 def check_datasets():
@@ -40,12 +40,12 @@ def check_datasets():
         "PAD-UFES-20": DATA_DIR / "raw" / "pad_ufes_20",
     }
 
-    logger.info("📋 Dataset check:")
+    logger.info("Dataset check:")
     for name, path in datasets.items():
         if path.exists():
-            logger.success(f"  ✅ {name}: found at {path}")
+            logger.success(f"  {name}: found at {path}")
         else:
-            logger.warning(f"  ⚠️  {name}: not found at {path}")
+            logger.warning(f"  {name}: not found at {path}")
 
     return all(p.exists() for p in datasets.values())
 
@@ -54,14 +54,14 @@ def check_pytorch():
     """Verify PyTorch and GPU availability."""
     logger.info(f"🔧 PyTorch version: {torch.__version__}")
     cuda_available = torch.cuda.is_available()
-    logger.info(f"🖥️  CUDA available: {cuda_available}")
+    logger.info(f"CUDA available: {cuda_available}")
     if cuda_available:
         logger.success(f"   GPU: {torch.cuda.get_device_name(0)}")
 
 
 def main():
     """Run preprocessing checks."""
-    logger.info("🚀 RareSight Preprocessing")
+    logger.info("RareSight preprocessing")
     logger.info("=" * 60)
 
     setup_directories()
@@ -74,10 +74,10 @@ def main():
     logger.info("")
 
     if all_ready:
-        logger.success("✅ All datasets ready for training!")
+        logger.success("All datasets ready for training.")
     else:
         logger.warning("""
-⚠️  Some datasets are missing. To proceed:
+Some datasets are missing. To proceed:
 
 1. **ISIC 2019**: https://isic-archive.com
    - Download training input → extract to data/raw/ISIC_2019_Training_Input

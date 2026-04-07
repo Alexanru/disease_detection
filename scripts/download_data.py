@@ -33,10 +33,10 @@ def preprocess_isic(data_root: Path):
     out_img = out_dir / "images"
 
     if out_img.exists() and any(out_img.iterdir()):
-        logger.info(f"✅ ISIC2019 deja procesat în {out_img}, sar peste preprocesare.")
+        logger.info(f"ISIC2019 already processed in {out_img}; skipping.")
         return
 
-    logger.info("🔬 Preprocesare ISIC2019 ...")
+    logger.info("Preprocessing ISIC2019")
     raw_img = data_root / "raw/ISIC_2019_Training_Input"
     out_img.mkdir(parents=True, exist_ok=True)
 
@@ -47,7 +47,7 @@ def preprocess_isic(data_root: Path):
         image_id = row["image"]
         candidates = list(raw_img.glob(f"{image_id}*.jpg"))
         if not candidates:
-            logger.warning(f"⚠️ Imagine ISIC {image_id} nu găsită")
+            logger.warning(f"ISIC image {image_id} not found")
             continue
 
         dst = out_img / f"{image_id}.jpg"
@@ -75,15 +75,15 @@ def preprocess_isic(data_root: Path):
 def preprocess_ham(data_root: Path):
     out_dir = data_root / "processed/ham10000"
     if out_dir.exists() and any(out_dir.iterdir()):
-        logger.info(f"✅ HAM10000 deja procesat în {out_dir}, sar peste preprocesare.")
+        logger.info(f"HAM10000 already processed in {out_dir}; skipping.")
         return
 
     meta_file = data_root / "raw/HAM10000/HAM10000_metadata.csv"
     if not meta_file.exists():
-        logger.error(f"⚠️ Nu am găsit fișierul metadata: {meta_file}")
+        logger.error(f"Metadata file not found: {meta_file}")
         return
 
-    logger.info("🧬 Preprocesare HAM10000 ...")
+    logger.info("Preprocessing HAM10000")
     meta = pd.read_csv(meta_file)
 
     # Mapează dx -> label
@@ -108,7 +108,7 @@ def preprocess_ham(data_root: Path):
                 break
 
         if image_path is None:
-            logger.warning(f"⚠️ Imagine HAM {image_id} nu găsită")
+            logger.warning(f"HAM image {image_id} not found")
             continue
 
         samples.append({
@@ -118,7 +118,7 @@ def preprocess_ham(data_root: Path):
         })
 
     if not samples:
-        logger.error("⚠️ Nu s-au găsit imagini valide pentru HAM10000")
+        logger.error("No valid HAM10000 images were found")
         return
 
     save_splits(pd.DataFrame(samples), out_dir)
@@ -137,7 +137,7 @@ def save_splits(df: pd.DataFrame, out_dir: Path):
     val.to_csv(out_dir / "val.csv", index=False)
     test.to_csv(out_dir / "test.csv", index=False)
 
-    logger.success(f"{out_dir.name}: {len(df)} samples procesate")
+    logger.success(f"{out_dir.name}: processed {len(df)} samples")
 
 # ─────────────────────────────────────────────────────────────
 # MAIN
@@ -147,7 +147,7 @@ def main():
     data_root = Path("data")
     preprocess_isic(data_root)
     preprocess_ham(data_root)
-    logger.success("🎉 ALL DATA READY!")
+    logger.success("All data is ready.")
 
 if __name__ == "__main__":
     main()
