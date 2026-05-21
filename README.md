@@ -1,11 +1,11 @@
-# RareSight
+# DermoDetection
 
-RareSight is a dermatology AI project for rare skin lesion detection.
+DermoDetection is a dermatology AI project for skin lesion prediction with image-only and multimodal inference.
 It supports:
 
 - Stage 1: self-supervised MAE pretraining
 - Stage 2: supervised image classifier (ISIC 2019)
-- Stage 3: multimodal classifier (image + clinical metadata, HAM10000)
+- Multimodal fusion: image + clinical metadata model (HAM10000)
 - FastAPI backend + Streamlit frontend for inference
 
 ---
@@ -28,10 +28,10 @@ It supports:
 
 ## About the App
 
-RareSight predicts dermatology classes from an uploaded lesion image.
+DermoDetection predicts dermatology classes from an uploaded lesion image.
 
-- In **Stage 2 mode**, inference is image-only.
-- In **Stage 3 mode**, inference uses image + clinical fields:
+- In **image-only mode**, inference is image-only.
+- In **multimodal mode**, inference uses image + clinical fields:
   - age
   - sex
   - lesion localization
@@ -42,13 +42,29 @@ The frontend automatically adapts to the model mode loaded by the API.
 
 ## Project Structure
 
-- `src/raresight/`: models, training, datasets, metrics
-- `scripts/`: Stage 1/2/3 training + evaluation scripts
+- `src/dermodetection/`: models, training, datasets, metrics
+- `scripts/`: Stage 1 / Stage 2 / multimodal training + evaluation scripts
 - `configs/`: Hydra config files
 - `api/`: FastAPI backend (`api/main.py`)
 - `frontend/`: Streamlit app (`frontend/app.py`)
 - `checkpoints/`: trained model files (`.pth`) (local, ignored by git)
 - `data/`: raw and processed datasets (local, ignored by git)
+
+---
+
+## Architecture
+
+DermoDetection is organized into clear functional layers:
+
+- `src/dermodetection/`
+  - `models/`: encoder, classifier, and multimodal fusion models
+  - `training/`: training loop, optimization, and loss utilities
+  - `evaluation/`: metrics and evaluation helpers
+  - `data/`: dataset loading, transforms, and multimodal dataset support
+- `scripts/`: training, evaluation, and preprocessing entry points
+- `api/`: inference service exposing `/health`, `/info`, and `/predict`
+- `frontend/`: Streamlit inference UI
+- `configs/`: Hydra configuration for fast and full training profiles
 
 ---
 
@@ -133,13 +149,13 @@ Expected outputs:
 python scripts/train_stage1_pretrain.py stage1=mae_fast
 ```
 
-### Stage 2
+### Image-only fine-tuning
 
 ```bash
 python scripts/train_stage2_finetune.py stage1=mae_fast stage2=finetune_fast
 ```
 
-### Stage 3
+### Multimodal fusion
 
 ```bash
 python scripts/train_stage3_multimodal.py stage1=mae_fast
@@ -167,7 +183,7 @@ python scripts/train_stage3_multimodal.py --resume stage1=mae_fast
 
 Use **two terminals**.
 
-### Stage 2 (image-only mode)
+### Image-only model
 
 Terminal 1 (API):
 
@@ -181,7 +197,7 @@ Terminal 2 (frontend):
 python -m streamlit run frontend/app.py --server.port 8501 --server.fileWatcherType none
 ```
 
-### Stage 3 (multimodal mode)
+### Multimodal model
 
 Terminal 1 (API):
 
@@ -211,12 +227,12 @@ Open:
 2. Confirm:
    - `status: ok`
    - `model_loaded: true`
-   - `model_mode: stage2` or `stage3` (as intended)
+   - `model_mode`: `stage2` for image-only inference or `stage3` for multimodal inference
 
 ### UI inference test
 
 1. Upload a lesion image (`.jpg`/`.png`)
-2. For Stage 3, fill:
+2. For multimodal mode, fill:
    - age
    - sex
    - localization
@@ -251,24 +267,24 @@ Suggested files:
 
 1. GitHub repo -> `Releases` -> `Create a new release`
 2. Tag: for example `v1-models`
-3. Title: `RareSight trained checkpoints`
+3. Title: `DermoDetection trained checkpoints`
 4. Attach `.pth` files as release assets
 5. Publish
 
 Recommended release description:
 
 ```text
-RareSight trained checkpoints for reproducible inference.
+DermoDetection trained checkpoints for reproducible inference.
 
 Files:
-- finetune_fast_best.pth: Stage 2 image-only model (ISIC 2019)
-- multimodal_best.pth: Stage 3 multimodal model (HAM10000)
+- finetune_fast_best.pth: image-only model (ISIC 2019)
+- multimodal_best.pth: multimodal model (HAM10000)
 - mae_fast_best.pth (optional): Stage 1 MAE encoder checkpoint
 
 Usage:
 - Stage 2 API:
   MODEL_CHECKPOINT=checkpoints/finetune_fast_best.pth python -m uvicorn api.main:app --port 8000
-- Stage 3 API:
+- Multimodal API:
   MODEL_MODE=stage3 MODEL_CHECKPOINT=checkpoints/multimodal_best.pth python -m uvicorn api.main:app --port 8000
 ```
 
@@ -294,7 +310,7 @@ No retraining is needed if checkpoints are available.
   - run with `--server.fileWatcherType none`.
 - If frontend shows offline:
   - verify API is running and `/health` returns `model_loaded: true`.
-- If Stage 3 API fails:
+- If multimodal API fails:
   - verify `MODEL_MODE=stage3`
   - verify `MODEL_CHECKPOINT=checkpoints/multimodal_best.pth`
   - verify checkpoint file exists.
