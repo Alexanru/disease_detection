@@ -13,7 +13,7 @@ It supports:
 ## Table of Contents
 
 - [About the App](#about-the-app)
-- [Project Structure](#project-structure)
+- [Architecture](#architecture)
 - [Requirements](#requirements)
 - [Quick Start (Devbox)](#quick-start-devbox)
 - [Dataset Setup](#dataset-setup)
@@ -40,31 +40,55 @@ The frontend automatically adapts to the model mode loaded by the API.
 
 ---
 
-## Project Structure
-
-- `src/dermodetection/`: models, training, datasets, metrics
-- `scripts/`: Stage 1 / Stage 2 / multimodal training + evaluation scripts
-- `configs/`: Hydra config files
-- `api/`: FastAPI backend (`api/main.py`)
-- `frontend/`: Streamlit app (`frontend/app.py`)
-- `checkpoints/`: trained model files (`.pth`) (local, ignored by git)
-- `data/`: raw and processed datasets (local, ignored by git)
-
----
-
 ## Architecture
 
-DermoDetection is organized into clear functional layers:
+The repository is organized into functional layers:
 
-- `src/dermodetection/`
-  - `models/`: encoder, classifier, and multimodal fusion models
-  - `training/`: training loop, optimization, and loss utilities
-  - `evaluation/`: metrics and evaluation helpers
-  - `data/`: dataset loading, transforms, and multimodal dataset support
-- `scripts/`: training, evaluation, and preprocessing entry points
-- `api/`: inference service exposing `/health`, `/info`, and `/predict`
-- `frontend/`: Streamlit inference UI
-- `configs/`: Hydra configuration for fast and full training profiles
+```
+disease_detection/
+├── src/raresight/                   ← Core library
+│   ├── models/
+│   │   ├── mae.py                   # Stage 1: Masked Autoencoder pretraining
+│   │   ├── classifier.py            # Stage 2: ViT-based image classifier
+│   │   └── multimodal.py            # Stage 3: Image + clinical metadata fusion
+│   ├── training/
+│   │   ├── trainer.py               # Training loop + checkpoint management
+│   │   └── losses.py                # Focal loss + custom objectives
+│   ├── evaluation/
+│   │   └── metrics.py               # Performance metrics (AUC, sensitivity, etc.)
+│   └── data/
+│       ├── dataset.py               # Image dataset loading and transforms
+│       └── multimodal_dataset.py    # Multimodal dataset with clinical fields
+│
+├── scripts/                         ← Training & preprocessing
+│   ├── train_stage1_pretrain.py     # MAE pretraining on ISIC 2019
+│   ├── train_stage2_finetune.py     # Fine-tuning on image labels
+│   ├── train_stage3_multimodal.py   # Multimodal training on HAM10000
+│   ├── evaluate.py                  # Model evaluation
+│   ├── download_data.py             # Dataset preparation
+│   └── preprocess.py                # Image normalization/augmentation
+│
+├── api/
+│   └── main.py                      # FastAPI backend (inference)
+│
+├── frontend/
+│   └── app.py                       # Streamlit frontend UI
+│
+├── configs/                         # Hydra configurations
+│   ├── config.yaml
+│   ├── config_stage3.yaml
+│   └── stage1/, stage2/, model/
+│
+├── notebooks/                       # EDA and exploratory work
+├── tests/                           # Unit tests and model checks
+├── Dockerfile                       # Container definition
+├── docker-compose.yml               # Multi-container orchestration
+├── pyproject.toml                   # Poetry dependencies
+├── devbox.json / devbox.lock        # Nix reproducible environment
+└── README.md                        # Documentation
+```
+
+---
 
 ---
 
